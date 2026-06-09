@@ -233,6 +233,19 @@
   .streak-bolinha.hoje.feito { background: var(--verde2); border-color: var(--ouro2); box-shadow: 0 0 0 3px rgba(200,169,110,0.3); }
   #frases-editor { margin-top: 8px; }
   #frases-editor textarea { width: 100%; height: 140px; font-family: 'Courier New', monospace; font-size: 13px; background: #F8F5EE; border: 1px solid var(--border); border-radius: 4px; padding: 10px; resize: vertical; }
+  /* CLASSIFICAÇÃO */
+  .tag-class { display:inline-block; font-family:Arial,sans-serif; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:2px; letter-spacing:0.5px; }
+  .tag-hard { background:#F8EEEE; color:var(--vermelho); border:1px solid #D9A0A0; }
+  .tag-medium { background:#FBF7EE; color:var(--ouro2); border:1px solid #D4C080; }
+  .tag-easy { background:#EBF5F0; color:var(--verde2); border:1px solid #90CCA8; }
+
+  /* SEÇÃO REVISAR nas stats */
+  #revisar-lista { display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+  .revisar-item { background:var(--card); border:1px solid var(--border); border-left:4px solid var(--vermelho); border-radius:4px; padding:12px 16px; font-family:Arial,sans-serif; font-size:14px; line-height:1.6; cursor:pointer; }
+  .revisar-item:hover { background:var(--perg); }
+  .revisar-item .rev-mat { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--ouro2); margin-bottom:4px; }
+  .revisar-item .rev-enunciado { color:var(--text); font-size:14px; }
+
   @media (max-width: 600px) {
     .config-grid { grid-template-columns: 1fr; }
     .resultado-stats { grid-template-columns: 1fr 1fr 1fr; }
@@ -469,6 +482,9 @@
       <option value="acertos">Somente acertos</option>
       <option value="erros">Somente erros</option>
       <option value="nao_respondidas">Não respondidas</option>
+      <option value="hard">Difíceis</option>
+      <option value="medium">Regulares</option>
+      <option value="easy">Fáceis</option>
     </select>
     <span id="gab-count" style="font-family:Arial,sans-serif;font-size:13px;color:var(--cinza);margin-left:auto"></span>
   </div>
@@ -481,6 +497,11 @@
   <div class="card">
     <div class="card-title">Desempenho por matéria</div>
     <div id="stats-materias"></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card-title">Para revisar <span class="tag-class tag-hard" style="margin-left:6px" id="revisar-count"></span></div>
+    <p style="font-family:Arial,sans-serif;font-size:13px;color:var(--cinza);margin-bottom:4px">Questões que você marcou como <strong>Difícil</strong> no flashcard.</p>
+    <div id="revisar-lista"></div>
   </div>
   <button class="btn btn-danger" id="btn-reset-stats" onclick="resetarEstatisticas()">Zerar histórico de respostas</button>
 </div>
@@ -541,6 +562,7 @@ async function salvarHistoricoRemoto(questaoId) {
       acertos: h.acertos || 0,
       erros: h.erros || 0,
       materia: h.materia || '',
+      classificacao: h.classificacao || null,
       atualizado_em: new Date().toISOString()
     });
   } catch(e) { console.warn('Sync historico falhou:', e); }
@@ -585,7 +607,7 @@ async function carregar() {
     if (hist && hist.length > 0) {
       historico = {};
       hist.forEach(h => {
-        historico[h.questao_id] = { acertos: h.acertos, erros: h.erros, materia: h.materia };
+        historico[h.questao_id] = { acertos: h.acertos, erros: h.erros, materia: h.materia, classificacao: h.classificacao || null };
       });
     }
 
@@ -995,6 +1017,12 @@ function fcRevelar() {
 }
 
 function fcRating(nivel) {
+  const q = fcEstado.fila[fcEstado.idx];
+  if (!historico[q.id]) historico[q.id] = { acertos: 0, erros: 0, materia: q.materia };
+  historico[q.id].classificacao = nivel; // 'hard', 'medium', 'easy'
+  salvarLocalCache();
+  salvarHistoricoRemoto(q.id);
+
   if (fcEstado.idx < fcEstado.fila.length - 1) {
     fcEstado.idx++;
     renderFC();
@@ -1018,6 +1046,9 @@ function renderGabarito() {
       if (result === 'acertos') return resp === q.gabarito;
       if (result === 'erros') return resp && resp !== q.gabarito;
       if (result === 'nao_respondidas') return !resp;
+      if (result === 'hard') return h?.classificacao === 'hard';
+      if (result === 'medium') return h?.classificacao === 'medium';
+      if (result === 'easy') return h?.classificacao === 'easy';
       return true;
     });
   }
@@ -1044,6 +1075,7 @@ function renderGabarito() {
         <div class="gab-enunciado-preview">${prev}</div>
         <div class="gab-tags">
           <span class="gab-mat-tag">${q.materia}</span>
+          ${historico[q.id]?.classificacao ? '<span class="tag-class tag-' + historico[q.id].classificacao + '">' + (historico[q.id].classificacao === 'hard' ? 'Difícil' : historico[q.id].classificacao === 'medium' ? 'Regular' : 'Fácil') + '</span>' : ''}
           <span class="gab-chevron">▾</span>
         </div>
       </div>
@@ -1100,15 +1132,55 @@ function renderStats() {
     const cls = pct < 0 ? '' : pct >= 70 ? '' : pct >= 50 ? 'med' : 'low';
     const pctTxt = pct < 0 ? '—' : pct + '%';
     
-    return `<div class="mat-row">
-      <span class="mat-nome">${m}</span>
-      <div class="mat-bar-wrap"><div class="mat-bar ${cls}" style="width:${pct<0?0:pct}%"></div></div>
-      <span class="mat-pct ${cls}">${pctTxt}</span>
-      <span class="mat-count">${ac}/${tot} respostas</span>
-    </div>`;
+    const classCount = { hard: 0, medium: 0, easy: 0 };
+    qs.forEach(q => { const c = historico[q.id]?.classificacao; if (c) classCount[c]++; });
+    const classHtml = (classCount.hard + classCount.medium + classCount.easy) > 0
+      ? '<span class="tag-class tag-hard" style="margin-left:6px">' + classCount.hard + ' dif</span>'
+        + '<span class="tag-class tag-medium" style="margin-left:4px">' + classCount.medium + ' reg</span>'
+        + '<span class="tag-class tag-easy" style="margin-left:4px">' + classCount.easy + ' fác</span>'
+      : '';
+
+    return '<div class="mat-row">'
+      + '<span class="mat-nome">' + m + '</span>'
+      + '<div class="mat-bar-wrap"><div class="mat-bar ' + cls + '" style="width:' + (pct<0?0:pct) + '%"></div></div>'
+      + '<span class="mat-pct ' + cls + '">' + pctTxt + '</span>'
+      + '<span class="mat-count">' + ac + '/' + tot + '</span>'
+      + classHtml
+      + '</div>';
   }).join('');
   
   statsDiv.innerHTML = rows;
+  renderRevisar();
+}
+
+function renderRevisar() {
+  const dificeis = banco.filter(q => historico[q.id]?.classificacao === 'hard');
+  const countEl = document.getElementById('revisar-count');
+  const listaEl = document.getElementById('revisar-lista');
+  if (!countEl || !listaEl) return;
+  countEl.textContent = dificeis.length;
+  if (dificeis.length === 0) {
+    listaEl.innerHTML = '<p style="font-family:Arial,sans-serif;font-size:13px;color:var(--cinza2);padding:8px 0">Nenhuma questão marcada como difícil ainda.</p>';
+    return;
+  }
+  listaEl.innerHTML = dificeis.map((q,i) => {
+    const prev = q.enunciado.length > 90 ? q.enunciado.substring(0,90)+'…' : q.enunciado;
+    return '<div class="revisar-item" onclick="abrirGabaritoQuestao('' + q.id + '')">'
+      + '<div class="rev-mat">' + q.materia + '</div>'
+      + '<div class="rev-enunciado">' + prev + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function abrirGabaritoQuestao(id) {
+  showView('gabarito');
+  setTimeout(() => {
+    const idx = banco.findIndex(q => String(q.id) === String(id));
+    if (idx >= 0) {
+      const el = document.getElementById('gabitem-' + idx);
+      if (el) { el.classList.add('open'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    }
+  }, 100);
 }
 
 function resetarEstatisticas() {
