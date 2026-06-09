@@ -1165,7 +1165,7 @@ function renderRevisar() {
   }
   listaEl.innerHTML = dificeis.map((q,i) => {
     const prev = q.enunciado.length > 90 ? q.enunciado.substring(0,90)+'…' : q.enunciado;
-    return '<div class="revisar-item" onclick="abrirGabaritoQuestao('' + q.id + '')">'
+    return '<div class="revisar-item" onclick="abrirGabaritoQuestao(\'' + q.id + '\')">'
       + '<div class="rev-mat">' + q.materia + '</div>'
       + '<div class="rev-enunciado">' + prev + '</div>'
       + '</div>';
