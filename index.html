@@ -500,7 +500,7 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const SB_HEADERS = { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
 
 async function sbGet(tabela, params) {
-  const url = SB_URL + '/rest/v1/' + tabela + '?' + (params || 'select=*');
+  const url = SB_URL + '/rest/v1/' + tabela + '?' + (params || 'select=*&limit=1000');
   const r = await fetch(url, { headers: SB_HEADERS });
   if (!r.ok) throw new Error('Erro ao buscar ' + tabela);
   return r.json();
